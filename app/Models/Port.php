@@ -56,7 +56,7 @@ class Port extends BaseModel
      */
     public function getShortLabel()
     {
-        return Rewrite::shortenIfName(Rewrite::normalizeIfName($this->getLabel()));
+        return Rewrite::shortenIfName(Rewrite::normalizeIfName($this->ifName ?: $this->ifDescr));
     }
 
     /**
@@ -129,6 +129,7 @@ class Port extends BaseModel
         return $query->where([
             ['deleted', '=', 0],
             ['ignore', '=', 0],
+            ['disabled', '=', 0],
             ['ifOperStatus', '=', 'up'],
         ]);
     }
@@ -142,8 +143,23 @@ class Port extends BaseModel
         return $query->where([
             ['deleted', '=', 0],
             ['ignore', '=', 0],
+            ['disabled', '=', 0],
             ['ifOperStatus', '=', 'down'],
             ['ifAdminStatus', '=', 'up'],
+        ]);
+    }
+
+    /**
+     * @param Builder $query
+     * @return Builder
+     */
+    public function scopeIsShutdown($query)
+    {
+        return $query->where([
+            ['deleted', '=', 0],
+            ['ignore', '=', 0],
+            ['disabled', '=', 0],
+            ['ifAdminStatus', '=', 'down'],
         ]);
     }
 
@@ -167,8 +183,7 @@ class Port extends BaseModel
     {
         return $query->where([
             ['deleted', '=', 0],
-            ['ignore', '=', 0],
-            ['ifAdminStatus', '=', 'down'],
+            ['disabled', '=', 1],
         ]);
     }
 
@@ -178,7 +193,11 @@ class Port extends BaseModel
      */
     public function scopeHasErrors($query)
     {
-        return $query->where(function ($query) {
+        return $query->where([
+            ['deleted', '=', 0],
+            ['ignore', '=', 0],
+            ['disabled', '=', 0],
+        ])->where(function ($query) {
             /** @var Builder $query */
             $query->where('ifInErrors_delta', '>', 0)
                 ->orWhere('ifOutErrors_delta', '>', 0);
@@ -200,6 +219,11 @@ class Port extends BaseModel
     public function events()
     {
         return $this->morphMany(Eventlog::class, 'events', 'type', 'reference');
+    }
+
+    public function fdbEntries()
+    {
+        return $this->hasMany('App\Models\PortsFdb', 'port_id', 'port_id');
     }
 
     public function users()

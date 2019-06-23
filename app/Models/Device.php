@@ -7,10 +7,13 @@ use Fico7489\Laravel\Pivot\Traits\PivotEventTrait;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Query\JoinClause;
+use Illuminate\Support\Str;
 use LibreNMS\Exceptions\InvalidIpException;
 use LibreNMS\Util\IP;
 use LibreNMS\Util\IPv4;
 use LibreNMS\Util\IPv6;
+use LibreNMS\Util\Url;
+use LibreNMS\Util\Time;
 
 class Device extends BaseModel
 {
@@ -19,7 +22,10 @@ class Device extends BaseModel
     public $timestamps = false;
     protected $primaryKey = 'device_id';
     protected $fillable = ['hostname', 'ip', 'status', 'status_reason'];
-    protected $casts = ['status' => 'boolean'];
+    protected $casts = [
+        'last_polled' => 'datetime',
+        'status' => 'boolean',
+    ];
 
     /**
      * Initialize this class
@@ -151,6 +157,51 @@ class Device extends BaseModel
         return $this->hostname;
     }
 
+    public function name()
+    {
+        $displayName = $this->displayName();
+        if ($this->sysName !== $displayName) {
+            return $this->sysName;
+        } elseif ($this->hostname !== $displayName && $this->hostname !== $this->ip) {
+            return $this->hostname;
+        }
+
+        return '';
+    }
+
+    public function isUnderMaintenance()
+    {
+        $query = AlertSchedule::isActive()
+            ->join('alert_schedulables', 'alert_schedule.schedule_id', 'alert_schedulables.schedule_id')
+            ->where(function ($query) {
+                $query->where(function ($query) {
+                    $query->where('alert_schedulable_type', 'device')
+                        ->where('alert_schedulable_id', $this->device_id);
+                });
+
+                if ($this->groups) {
+                    $query->orWhere(function ($query) {
+                        $query->where('alert_schedulable_type', 'device_group')
+                            ->whereIn('alert_schedulable_id', $this->groups->pluck('id'));
+                    });
+                }
+            });
+
+        return $query->exists();
+    }
+
+    public function loadOs($force = false)
+    {
+        $yaml_file = base_path('/includes/definitions/' . $this->os . '.yaml');
+
+        if ((!\LibreNMS\Config::getOsSetting($this->os, 'definition_loaded') || $force) && file_exists($yaml_file)) {
+            $os = \Symfony\Component\Yaml\Yaml::parse(file_get_contents($yaml_file));
+
+            \LibreNMS\Config::set("os.$this->os", array_replace_recursive($os, \LibreNMS\Config::get("os.$this->os", [])));
+            \LibreNMS\Config::set("os.$this->os.definition_loaded", true);
+        }
+    }
+
     /**
      * Get the shortened display name of this device.
      * Length is always overridden by shorthost_target_length.
@@ -199,34 +250,7 @@ class Device extends BaseModel
 
     public function formatUptime($short = false)
     {
-        $result = '';
-        $interval = $this->uptime;
-        $data = [
-            'years' => 31536000,
-            'days' => 86400,
-            'hours' => 3600,
-            'minutes' => 60,
-            'seconds' => 1,
-        ];
-
-        foreach ($data as $k => $v) {
-            if ($interval >= $v) {
-                $diff = floor($interval / $v);
-
-                $result .= " $diff";
-                if ($short) {
-                    $result .= substr($k, 0, 1);
-                } elseif ($diff > 1) {
-                    $result .= $k;
-                } else {
-                    $result .= substr($k, 0, -1);
-                }
-
-                $interval -= $v * $diff;
-            }
-        }
-
-        return $result;
+        return Time::formatInterval($this->uptime, $short);
     }
 
     /**
@@ -249,6 +273,18 @@ class Device extends BaseModel
         }
 
         return asset('images/os/generic.svg');
+    }
+
+    /**
+     * Get list of enabled graphs for this device.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    public function graphs()
+    {
+        return DB::table('device_graphs')
+            ->where('device_id', $this->device_id)
+            ->pluck('graph');
     }
 
     /**
@@ -301,19 +337,21 @@ class Device extends BaseModel
     /**
      * @return string
      */
-    public function statusColour()
+    public function statusName()
     {
-        $status = $this->status;
-        $ignore = $this->ignore;
-        $disabled = $this->disabled;
-        if ($disabled == 1) {
-            return 'teal';
-        } elseif ($ignore == 1) {
-            return 'yellow';
-        } elseif ($status == 0) {
-            return 'danger';
+        if ($this->disabled == 1) {
+            return 'disabled';
+        } elseif ($this->ignore == 1) {
+            return 'ignore';
+        } elseif ($this->status == 0) {
+            return 'down';
         } else {
-            return 'success';
+            $warning_time = \LibreNMS\Config::get('uptime_warning', 84600);
+            if ($this->uptime < $warning_time && $this->uptime != 0) {
+                return 'warn';
+            }
+
+            return 'up';
         }
     }
 
@@ -321,11 +359,10 @@ class Device extends BaseModel
 
     public function getIconAttribute($icon)
     {
-        if (isset($icon)) {
-            return "images/os/$icon";
-        }
-        return 'images/os/generic.svg';
+        $this->loadOs();
+        return Str::start(Url::findOsImage($this->os, $this->features, $icon), 'images/os/');
     }
+
     public function getIpAttribute($ip)
     {
         if (empty($ip)) {
@@ -420,6 +457,11 @@ class Device extends BaseModel
         return $this->hasMany('App\Models\Alert', 'device_id');
     }
 
+    public function alertSchedules()
+    {
+        return $this->morphToMany('App\Models\AlertSchedule', 'alert_schedulable', 'alert_schedulables', 'schedule_id', 'schedule_id');
+    }
+
     public function applications()
     {
         return $this->hasMany('App\Models\Application', 'device_id');
@@ -447,7 +489,7 @@ class Device extends BaseModel
 
     public function eventlogs()
     {
-        return $this->hasMany('App\Models\General\Eventlog', 'host', 'device_id');
+        return $this->hasMany('App\Models\Eventlog', 'device_id', 'device_id');
     }
 
     public function groups()
@@ -485,6 +527,16 @@ class Device extends BaseModel
         return $this->hasMany('App\Models\Port', 'device_id', 'device_id');
     }
 
+    public function portsFdb()
+    {
+        return $this->hasMany('App\Models\PortsFdb', 'device_id', 'device_id');
+    }
+
+    public function portsNac()
+    {
+        return $this->hasMany('App\Models\PortsNac', 'device_id', 'device_id');
+    }
+
     public function processors()
     {
         return $this->hasMany('App\Models\Processor', 'device_id');
@@ -515,9 +567,19 @@ class Device extends BaseModel
         return $this->hasMany('App\Models\Mempool', 'device_id');
     }
 
+    public function mplsLsps()
+    {
+        return $this->hasMany('App\Models\MplsLsp', 'device_id');
+    }
+
+    public function mplsLspPaths()
+    {
+        return $this->hasMany('App\Models\MplsLspPath', 'device_id');
+    }
+
     public function syslogs()
     {
-        return $this->hasMany('App\Models\General\Syslog', 'device_id', 'device_id');
+        return $this->hasMany('App\Models\Syslog', 'device_id', 'device_id');
     }
 
     public function users()
@@ -529,5 +591,10 @@ class Device extends BaseModel
     public function vrfs()
     {
         return $this->hasMany('App\Models\Vrf', 'device_id');
+    }
+
+    public function wirelessSensors()
+    {
+        return $this->hasMany('App\Models\WirelessSensor', 'device_id');
     }
 }

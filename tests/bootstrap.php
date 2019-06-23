@@ -28,8 +28,6 @@ use LibreNMS\DB\Eloquent;
 use LibreNMS\Exceptions\DatabaseConnectException;
 use LibreNMS\Util\Snmpsim;
 
-global $config;
-
 $install_dir = realpath(__DIR__ . '/..');
 
 $init_modules = array('web', 'discovery', 'polling', 'nodb');
@@ -70,30 +68,29 @@ if (getenv('DBTEST')) {
     $db_name = $db_config['db_name'];
 
     $connection = new PDO("mysql:host={$db_config['db_host']}", $db_config['db_user'], $db_config['db_pass']);
-    $connection->query("CREATE DATABASE IF NOT EXISTS $db_name");
+    $connection->query("CREATE DATABASE IF NOT EXISTS $db_name CHARACTER SET utf8 COLLATE utf8_unicode_ci");
     unset($connection); // close connection
 
-    \LibreNMS\DB\Eloquent::boot();
-    \LibreNMS\DB\Eloquent::setStrictMode();
+    Eloquent::boot();
+    Eloquent::setStrictMode();
 
     $empty_db = (dbFetchCell("SELECT count(*) FROM `information_schema`.`tables` WHERE `table_type` = 'BASE TABLE' AND `table_schema` = ?", [$db_name]) == 0);
 
-    $cmd = $config['install_dir'] . '/build-base.php';
+    $cmd = Config::get('install_dir') . '/build-base.php';
     exec($cmd, $schema);
 
     Config::load(); // reload the config including database config
     load_all_os();
 
     register_shutdown_function(function () use ($empty_db, $sql_mode) {
-        global $config;
-        \LibreNMS\DB\Eloquent::boot();
+        Eloquent::boot();
 
         echo "Cleaning database...\n";
 
         $db_name = dbFetchCell('SELECT DATABASE()');
         if ($empty_db) {
             dbQuery("DROP DATABASE $db_name");
-        } elseif (isset($config['test_db_name']) && $config['test_db_name'] == $db_name) {
+        } elseif (Config::get('test_db_name') == $db_name) {
             // truncate tables
             $tables = dbFetchColumn('SHOW TABLES');
 
@@ -101,8 +98,7 @@ if (getenv('DBTEST')) {
                 'alert_templates',
                 'config', // not sure about this one
                 'dbSchema',
-                'graph_types',
-                'port_association_mode',
+                'migrations',
                 'widgets',
             );
             $truncate = array_diff($tables, $excluded);

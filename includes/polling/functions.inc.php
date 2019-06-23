@@ -42,7 +42,7 @@ function sensor_precache($device, $type)
 
 function poll_sensor($device, $class)
 {
-    global $config, $memcache, $agent_sensors;
+    global $agent_sensors;
 
     $sensors = array();
     $misc_sensors = array();
@@ -72,6 +72,8 @@ function poll_sensor($device, $class)
 
             if (file_exists('includes/polling/sensors/'. $class .'/'. $device['os'] .'.inc.php')) {
                 require 'includes/polling/sensors/'. $class .'/'. $device['os'] .'.inc.php';
+            } elseif (file_exists('includes/polling/sensors/'. $class .'/'. $device['os_group'] .'.inc.php')) {
+                require 'includes/polling/sensors/'. $class .'/'. $device['os_group'] .'.inc.php';
             }
 
             if ($class == 'temperature') {
@@ -169,7 +171,7 @@ function record_sensor_data($device, $all_sensors)
             $sensor_value = ($sensor_value * $sensor['sensor_multiplier']);
         }
 
-        if (isset($sensor['user_func']) && function_exists($sensor['user_func'])) {
+        if (isset($sensor['user_func']) && is_callable($sensor['user_func'])) {
             $sensor_value = $sensor['user_func']($sensor_value);
         }
 
@@ -226,7 +228,7 @@ function record_sensor_data($device, $all_sensors)
  */
 function poll_device($device, $force_module = false)
 {
-    global $config, $device;
+    global $device;
 
     $device_start = microtime(true);
 
@@ -241,20 +243,24 @@ function poll_device($device, $force_module = false)
     unset($array);
 
     // Start counting device poll time
-    echo 'Hostname: ' . $device['hostname'] . PHP_EOL;
-    echo 'Device ID: ' . $device['device_id'] . PHP_EOL;
-    echo 'OS: ' . $device['os'];
+    echo 'Hostname:    ' . $device['hostname'] . PHP_EOL;
+    echo 'Device ID:   ' . $device['device_id'] . PHP_EOL;
+    echo 'OS:          ' . $device['os'] . PHP_EOL;
     $ip = dnslookup($device);
 
-    $db_ip = isset($ip) ? inet_pton($ip) : null;
+    $db_ip = null;
+    if (!empty($ip)) {
+        echo 'Resolved IP: '.$ip.PHP_EOL;
+        $db_ip = inet_pton($ip);
+    }
 
     if (!empty($db_ip) && inet6_ntop($db_ip) != inet6_ntop($device['ip'])) {
         log_event('Device IP changed to ' . $ip, $device, 'system', 3);
         dbUpdate(array('ip' => $db_ip), 'devices', 'device_id=?', array($device['device_id']));
     }
 
-    if ($config['os'][$device['os']]['group']) {
-        $device['os_group'] = $config['os'][$device['os']]['group'];
+    if ($os_group = Config::get("os.{$device['os']}.group")) {
+        $device['os_group'] = $os_group;
         echo ' ('.$device['os_group'].')';
     }
 
@@ -267,7 +273,7 @@ function poll_device($device, $force_module = false)
     $update_array = array();
 
     $host_rrd = rrd_name($device['hostname'], '', '');
-    if ($config['norrd'] !== true && !is_dir($host_rrd)) {
+    if (Config::get('norrd') !== true && !is_dir($host_rrd)) {
         mkdir($host_rrd);
         echo "Created directory : $host_rrd\n";
     }
@@ -279,15 +285,15 @@ function poll_device($device, $force_module = false)
         $oldgraphs = array();
 
         if ($device['snmp_disable']) {
-            $config['poller_modules'] = array();
+            Config::set('poller_modules', []);
         } else {
             // we always want the core module to be included, prepend it
-            $config['poller_modules'] = array('core' => true) + $config['poller_modules'];
+            Config::set('poller_modules', ['core' => true] + Config::get('poller_modules'));
         }
 
         printChangedStats(true); // don't count previous stats
-        foreach ($config['poller_modules'] as $module => $module_status) {
-            $os_module_status = $config['os'][$device['os']]['poller_modules'][$module];
+        foreach (Config::get('poller_modules') as $module => $module_status) {
+            $os_module_status = Config::get("os.{$device['os']}.poller_modules.$module");
             d_echo("Modules status: Global" . (isset($module_status) ? ($module_status ? '+ ' : '- ') : '  '));
             d_echo("OS" . (isset($os_module_status) ? ($os_module_status ? '+ ' : '- ') : '  '));
             d_echo("Device" . (isset($attribs['poll_' . $module]) ? ($attribs['poll_' . $module] ? '+ ' : '- ') : '  '));
@@ -341,7 +347,14 @@ function poll_device($device, $force_module = false)
         }
 
         // Update device_groups
-        UpdateGroupsForDevice($device['device_id']);
+        echo "### Start Device Groups ###\n";
+        $dg_start = microtime(true);
+
+        $group_changes = \App\Models\DeviceGroup::updateGroupsFor($device['device_id']);
+        d_echo("Groups Added: " . implode(',', $group_changes['attached']) . PHP_EOL);
+        d_echo("Groups Removed: " . implode(',', $group_changes['detached']) . PHP_EOL);
+
+        echo "### End Device Groups, runtime: " . round(microtime(true) - $dg_start, 4) . "s ### \n\n";
 
         if (!$force_module && !empty($graphs)) {
             echo "Enabling graphs: ";
@@ -412,8 +425,8 @@ function poll_device($device, $force_module = false)
         echo "\nPolled in $device_time seconds\n";
 
         // check if the poll took to long and log an event
-        if ($device_time > $config['rrd']['step']) {
-            log_event("Polling took longer than " . round($config['rrd']['step'] / 60, 2) .
+        if ($device_time > Config::get('rrd.step')) {
+            log_event("Polling took longer than " . round(Config::get('rrd.step') / 60, 2) .
                 ' minutes!  This will cause gaps in graphs.', $device, 'system', 5);
         }
 
@@ -514,7 +527,7 @@ function poll_mib_def($device, $mib_name_table, $mib_subdir, $mib_oids, $mib_gra
 function get_main_serial($device)
 {
     if ($device['os_group'] == 'cisco') {
-        $serial_output = snmp_get_multi($device, 'entPhysicalSerialNum.1 entPhysicalSerialNum.1001', '-OQUs', 'ENTITY-MIB:OLD-CISCO-CHASSIS-MIB');
+        $serial_output = snmp_get_multi($device, ['entPhysicalSerialNum.1', 'entPhysicalSerialNum.1001'], '-OQUs', 'ENTITY-MIB:OLD-CISCO-CHASSIS-MIB');
         if (!empty($serial_output[1]['entPhysicalSerialNum'])) {
             return $serial_output[1]['entPhysicalSerialNum'];
         } elseif (!empty($serial_output[1000]['entPhysicalSerialNum'])) {

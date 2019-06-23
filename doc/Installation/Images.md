@@ -1,4 +1,4 @@
-> NOTE: We highly advice that you change all passwords on this image when you deploy it!!
+> NOTE: We highly advise that you change all passwords on this image when you deploy it!!
 
 > NOTE: Read the above note again!
 
@@ -26,7 +26,7 @@ At present we provide the following builds:
 
 ### Features
 
-  - Oxidized install but not configured
+  - Oxidized installed but not configured
   - Weathermap plugin enabled
   - Billing enabled
   - RRDCached enabled
@@ -35,7 +35,7 @@ At present we provide the following builds:
 
 #### Download
 
-All images can be downloaded from [GitHub](https://github.com/librenms/packer-builds/releases). The tags follow the main LibreNMS repo.
+All images can be downloaded from [GitHub](https://github.com/librenms/packer-builds/releases/latest). The tags follow the main LibreNMS repo.
 When a new LibreNMS release is available we will push new images out running that version. Please do note that if you download an older 
 release with a view to running that specific version, you will need to disable updates in config.php.
 

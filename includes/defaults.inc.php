@@ -224,8 +224,12 @@ $config['alerts']['port_util_perc'] = 85;
 $config['uptime_warning'] = '84600';
 // Time in seconds to display a "Device Rebooted" Alert. 0 to disable warnings.
 // Cosmetics
-$config['rrdgraph_def_text']  = '-c BACK#EEEEEE00 -c SHADEA#EEEEEE00 -c SHADEB#EEEEEE00 -c FONT#000000 -c CANVAS#FFFFFF00 -c GRID#a5a5a5';
+$config['rrdgraph_def_text']  = '-c BACK#EEEEEE00 -c SHADEA#EEEEEE00 -c SHADEB#EEEEEE00 -c CANVAS#FFFFFF00 -c GRID#a5a5a5';
 $config['rrdgraph_def_text'] .= ' -c MGRID#FF9999 -c FRAME#5e5e5e -c ARROW#5e5e5e -R normal';
+// This is largely for people who are using a dark CSS override system.
+// For multi-user installs, likely best to leave it at the default or pick one that works nicely for both.
+// If you want a color that works nice for both a dark or light BG, 0000FF seems to.
+$config['rrdgraph_def_text_color'] = '000000';
 $config['rrdgraph_real_percentile'] = false;
 $config['percentile_value'] = 95;
 // Set to TRUE if you want to display the 95% based on the highest value. (aka real 95%)
@@ -267,6 +271,7 @@ $config['graph_colours']['mixed']   = array(
     'D01F3C',
     '36393D',
     'FF0084',
+    '91B13C',
 );
 $config['graph_colours']['oranges'] = array(
     'E43C00',
@@ -364,12 +369,20 @@ $config['network_map_legend'] = array(
     '90'           => '#d12300',
     '95'           => '#cc0000',
     '100'          => '#cc0000',
-    'di.edge'      => '#dddddd88',
-    'di.border'    => '#cccccc',
-    'di.node'      => '#eeeeee',
-    'dn.edge'      => '#ff777788',
-    'dn.border'    => '#ff5555',
-    'dn.node'      => '#ffdddd',
+    [
+        'di' => [
+            'edge' => '#dddddd88',
+            'border' => '#cccccc',
+            'node' => '#eeeeee',
+        ]
+    ],
+    [
+        'dn' => [
+            'edge' => '#ff777788',
+            'border' => '#ff5555',
+            'node' => '#ffdddd',
+        ]
+    ]
 );
 
 // Default mini graph time options:
@@ -584,6 +597,9 @@ $config['bad_if_regexp'][] = '/^sl[0-9]/';
 // Rewrite Interfaces
 $config['rewrite_if_regexp']['/^cpu interface/'] = 'Mgmt';
 
+// Storage default warning percentage
+$config['storage_perc_warn'] = 60;
+
 $config['ignore_mount_removable'] = 1;
 // Ignore removable disk storage
 $config['ignore_mount_network'] = 1;
@@ -698,6 +714,7 @@ $config['ignore_mount_regexp'][] = '/^(dev|proc)fs/';
 $config['ignore_mount_regexp'][] = '/^\/dev\/md0/';
 $config['ignore_mount_regexp'][] = '/^\/var\/dhcpd\/dev/';
 $config['ignore_mount_regexp'][] = '/UMA/';
+$config['ignore_mount_regexp'][] = "/^\/Volumes\/OS X Base System/";
 
 $config['ignore_mount_removable'] = 1;
 // Ignore removable disk storage
@@ -782,6 +799,7 @@ $config['poller_modules']['cisco-voice']                 = false;
 $config['poller_modules']['cisco-cbqos']                 = false;
 $config['poller_modules']['cisco-otv']                   = false;
 $config['poller_modules']['cisco-vpdn']                  = false;
+$config['poller_modules']['nac']                         = false;
 $config['poller_modules']['netscaler-vsvr']              = false;
 $config['poller_modules']['aruba-controller']            = false;
 $config['poller_modules']['entity-physical']             = true;
@@ -792,6 +810,7 @@ $config['poller_modules']['stp']                         = true;
 $config['poller_modules']['ntp']                         = true;
 $config['poller_modules']['loadbalancers']               = false;
 $config['poller_modules']['mef']                         = false;
+$config['poller_modules']['mpls']                        = true;
 
 // List of discovery modules. Need to be in this array to be
 // considered for execution.
@@ -834,8 +853,12 @@ $config['discovery_modules']['loadbalancers']        = false;
 $config['discovery_modules']['mef']                  = false;
 $config['discovery_modules']['wireless']             = true;
 $config['discovery_modules']['fdb-table']            = true;
+$config['discovery_modules']['mpls']                 = true;
 // Enable daily updates
 $config['update'] = 1;
+
+// Sets automatic sensor limits when no values are returned by the device.
+$config['sensors']['guess_limits']                   = true;
 
 // Purge syslog and eventlog
 $config['syslog_purge'] = 30;
@@ -850,6 +873,8 @@ $config['device_perf_purge'] = 7;
 // Number in days of how long to keep device performance data for.
 $config['alert_log_purge'] = 365;
 // Number in days of how long to keep alert log data for.
+$config['ports_fdb_purge'] = 10;
+// Number in days of how long to keep fdb table data for.
 
 // Date format for PHP date()s
 $config['dateformat']['long'] = 'r';
@@ -873,8 +898,8 @@ $config['allow_duplicate_sysName'] = false;// Set to true if you want to allow d
 
 $config['enable_port_relationship'] = true;
 // Set this to false to not display neighbour relationships for ports
-$config['enable_footer'] = 1;
-// Set this to 0 if you want to disable the footer copyright in the web interface
+$config['enable_footer'] = false;
+// Set this to true if you want to enable the footer in the web interface
 $config['api_demo'] = 0;
 // Set this to 1 if you want to disable some untrusting features for the API
 // Distributed Poller-Settings
@@ -883,6 +908,20 @@ $config['distributed_poller_name']           = php_uname('n');
 $config['distributed_poller_group']          = 0;
 $config['distributed_poller_memcached_host'] = 'example.net';
 $config['distributed_poller_memcached_port'] = '11211';
+
+// BETA polller service config options.
+// See https://docs.librenms.org/Extensions/Poller-Service/ for more information
+//$config['service_poller_workers']              = 24;     # Processes spawned for polling
+//$config['service_services_workers']            = 8;      # Processes spawned for service polling
+//$config['service_discovery_workers']           = 16;     # Processes spawned for discovery
+// Optional BETA polller service Settings
+//$config['service_poller_frequency']            = 300;    # Seconds between polling attempts
+//$config['service_services_frequency']          = 300;    # Seconds between service polling attempts
+//$config['service_discovery_frequency']         = 21600;  # Seconds between discovery runs
+//$config['service_billing_frequency']           = 300;    # Seconds between billing calculations
+//$config['service_billing_calculate_frequency'] = 60;     # Billing interval
+//$config['service_poller_down_retry']           = 60;     # Seconds between failed polling attempts
+//$config['service_loglevel']                    = 'INFO'; # Must be one of 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
 
 // Stats callback system
 $config['callback_post']  = 'https://stats.librenms.org/log.php';
@@ -928,9 +967,6 @@ $config['leaflet']['tile_url']                          = "{s}.tile.openstreetma
 // General GUI options
 $config['gui']['network-map']['style']                  = 'new';//old is also valid
 
-// Navbar variables
-$config['navbar']['manage_groups']['hide']              = 0;
-
 // Show errored ports in the summary table on the dashboard
 $config['summary_errors']                               = 0;
 
@@ -962,13 +998,6 @@ $config['xirrus_disable_stations']  = false;
 
 // Graphite default port
 $config['graphite']['port']         = 2003;
-
-// Whether to enable secure cookies. Setting this to true enable secure cookies
-// and only send them over HTTPS. Setting this to false will send cookies over
-// HTTP and HTTPS, but they will be insecure. Setting this to $_SERVER["HTTPS"]
-// will send secure cookies when the site is being accessed over HTTPS, and
-// send insecure cookies when the site is being accessed over HTTP.
-$config['secure_cookies'] = isset($_SERVER["HTTPS"]) ? $_SERVER["HTTPS"] : false;
 
 // API config
 $config['api']['cors']['enabled'] = false;

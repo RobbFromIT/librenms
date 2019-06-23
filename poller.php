@@ -17,30 +17,32 @@ $init_modules = ['polling', 'alerts', 'laravel'];
 require __DIR__ . '/includes/init.php';
 
 $poller_start = microtime(true);
-echo $config['project_name_version']." Poller\n";
+echo Config::get('base_url') . " Poller\n";
 
 $options = getopt('h:m:i:n:r::d::v::a::f::q');
 
-if ($options['h'] == 'odd') {
-    $options['n'] = '1';
-    $options['i'] = '2';
-} elseif ($options['h'] == 'even') {
-    $options['n'] = '0';
-    $options['i'] = '2';
-} elseif ($options['h'] == 'all') {
-    $where = ' ';
-    $doing = 'all';
-} elseif ($options['h']) {
-    if (is_numeric($options['h'])) {
-        $where = "AND `device_id` = ".$options['h'];
-        $doing = $options['h'];
-    } else {
-        if (preg_match('/\*/', $options['h'])) {
-            $where = "AND `hostname` LIKE '".str_replace('*', '%', mres($options['h']))."'";
+if (isset($options['h'])) {
+    if ($options['h'] == 'odd') {
+        $options['n'] = '1';
+        $options['i'] = '2';
+    } elseif ($options['h'] == 'even') {
+        $options['n'] = '0';
+        $options['i'] = '2';
+    } elseif ($options['h'] == 'all') {
+        $where = ' ';
+        $doing = 'all';
+    } elseif ($options['h']) {
+        if (is_numeric($options['h'])) {
+            $where = "AND `device_id` = " . $options['h'];
+            $doing = $options['h'];
         } else {
-            $where = "AND `hostname` = '".mres($options['h'])."'";
+            if (preg_match('/\*/', $options['h'])) {
+                $where = "AND `hostname` LIKE '" . str_replace('*', '%', mres($options['h'])) . "'";
+            } else {
+                $where = "AND `hostname` = '" . mres($options['h']) . "'";
+            }
+            $doing = $options['h'];
         }
-        $doing = $options['h'];
     }
 }
 
@@ -58,7 +60,7 @@ if (isset($options['i']) && $options['i'] && isset($options['n'])) {
     $doing = $options['n'].'/'.$options['i'];
 }
 
-if (!$where) {
+if (empty($where)) {
     echo "-h <device id> | <device hostname wildcard>  Poll single device\n";
     echo "-h odd             Poll odd numbered devices  (same as -i 2 -n 0)\n";
     echo "-h even            Poll even numbered devices (same as -i 2 -n 1)\n";
@@ -100,11 +102,11 @@ EOH;
 }
 
 if (isset($options['r'])) {
-    $config['norrd'] = true;
+    Config::set('norrd', true);
 }
 
 if (isset($options['f'])) {
-    $config['noinfluxdb'] = true;
+    Config::set('noinfluxdb', true);
 }
 
 if (isset($options['p'])) {
@@ -112,22 +114,22 @@ if (isset($options['p'])) {
 }
 
 if (isset($options['g'])) {
-    $config['nographite'] = true;
+    Config::set('nographite', true);
 }
 
-if ($config['noinfluxdb'] !== true && $config['influxdb']['enable'] === true) {
+if (Config::get('base_url') !== true && Config::get('influxdb.enable') === true) {
     $influxdb = influxdb_connect();
 } else {
     $influxdb = false;
 }
 
-if ($config['nographite'] !== true && $config['graphite']['enable'] === true) {
-    $graphite = fsockopen($config['graphite']['host'], $config['graphite']['port']);
+if (Config::get('base_url') !== true && Config::get('graphite.enable') === true) {
+    $graphite = fsockopen(Config::get('graphite.host'), Config::get('graphite.port'));
     if ($graphite !== false) {
-        echo "Connection made to {$config['graphite']['host']} for Graphite support\n";
+        echo "Connection made to " . Config::get('graphite.host') . " for Graphite support\n";
     } else {
-        echo "Connection to {$config['graphite']['host']} has failed, Graphite support disabled\n";
-        $config['nographite'] = true;
+        echo "Connection to " . Config::get('graphite.host') . " has failed, Graphite support disabled\n";
+        Config::set('nographite', true);
     }
 } else {
     $graphite = false;
@@ -177,11 +179,11 @@ if ($polled_devices) {
         'start' => $poller_start,
         'duration' => $poller_time,
         'devices' => $polled_devices,
-        'poller' => $config['distributed_poller_name']
+        'poller' => Config::get('base_url')
     ), 'perf_times');
 }
 
-$string = $argv[0]." $doing ".date($config['dateformat']['compact'])." - $polled_devices devices polled in $poller_time secs";
+$string = $argv[0] . " $doing " . date(Config::get('dateformat.compact')) . " - $polled_devices devices polled in $poller_time secs";
 d_echo("$string\n");
 
 if (!isset($options['q'])) {
@@ -190,7 +192,7 @@ if (!isset($options['q'])) {
 
 logfile($string);
 rrdtool_close();
-unset($config);
+
 // Remove this for testing
 // print_r(get_defined_vars());
 

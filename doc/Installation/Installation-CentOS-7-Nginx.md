@@ -2,7 +2,7 @@ source: Installation/Installation-CentOS-7-Nginx.md
 path: blob/master/doc/
 > NOTE: These instructions assume you are the **root** user.  If you are not, prepend `sudo` to the shell commands (the ones that aren't at `mysql>` prompts) or temporarily become a user with root privileges with `sudo -s` or `sudo -i`.
 
-**Please note the minimum supported PHP version is 5.6.4**
+**Please note the minimum supported PHP version is 7.1.3**
 
 ## Install Required Packages ##
 
@@ -20,7 +20,21 @@ path: blob/master/doc/
 #### Download LibreNMS
 
     cd /opt
-    composer create-project --no-dev --keep-vcs librenms/librenms librenms dev-master
+    git clone https://github.com/librenms/librenms.git
+    
+#### Set permissions
+
+    chown -R librenms:librenms /opt/librenms
+    chmod 770 /opt/librenms
+    setfacl -d -m g::rwx /opt/librenms/rrd /opt/librenms/logs /opt/librenms/bootstrap/cache/ /opt/librenms/storage/
+    setfacl -R -m g::rwx /opt/librenms/rrd /opt/librenms/logs /opt/librenms/bootstrap/cache/ /opt/librenms/storage/
+    chgrp apache /var/lib/php/session/
+
+#### Install PHP dependencies
+
+    su - librenms
+    ./scripts/composer_wrapper.php install --no-dev
+    exit
 
 ## DB Server ##
 
@@ -186,18 +200,13 @@ Edit the text which says `RANDOMSTRINGGOESHERE` and set your own community strin
 
     cp /opt/librenms/librenms.nonroot.cron /etc/cron.d/librenms
 
+> NOTE: Keep in mind  that cron, by default, only uses a very limited set of environment variables. You may need to configure proxy variables for the cron invocation. Alternatively adding the proxy settings in config.php is possible too. The config.php file will be created in the upcoming steps. Review the following URL after you finished librenms install steps: https://docs.librenms.org/Support/Configuration/#proxy-support
+
 #### Copy logrotate config
 
 LibreNMS keeps logs in `/opt/librenms/logs`. Over time these can become large and be rotated out.  To rotate out the old logs you can use the provided logrotate config file:
 
     cp /opt/librenms/misc/librenms.logrotate /etc/logrotate.d/librenms
-
-### Set permissions
-
-    chown -R librenms:librenms /opt/librenms
-    setfacl -d -m g::rwx /opt/librenms/rrd /opt/librenms/logs /opt/librenms/bootstrap/cache/ /opt/librenms/storage/
-    setfacl -R -m g::rwx /opt/librenms/rrd /opt/librenms/logs /opt/librenms/bootstrap/cache/ /opt/librenms/storage/
-    chgrp apache /var/lib/php/session/
 
 ## Web installer ##
 

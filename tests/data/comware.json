@@ -18,7 +18,8 @@
                     "bgpPeerFsmEstablishedTime": 0,
                     "bgpPeerInUpdateElapsedTime": 0,
                     "context_name": "",
-                    "bgpLocalAs": 65504
+                    "bgpLocalAs": 65504,
+                    "vrfLocalAs": null
                 },
                 {
                     "astext": "",
@@ -36,7 +37,8 @@
                     "bgpPeerFsmEstablishedTime": 0,
                     "bgpPeerInUpdateElapsedTime": 0,
                     "context_name": "",
-                    "bgpLocalAs": 65504
+                    "bgpLocalAs": 65504,
+                    "vrfLocalAs": null
                 }
             ],
             "bgpPeers_cbgp": []
@@ -59,7 +61,8 @@
                     "bgpPeerFsmEstablishedTime": 259280,
                     "bgpPeerInUpdateElapsedTime": 259280,
                     "context_name": "",
-                    "bgpLocalAs": 65504
+                    "bgpLocalAs": 65504,
+                    "vrfLocalAs": null
                 },
                 {
                     "astext": "",
@@ -77,7 +80,8 @@
                     "bgpPeerFsmEstablishedTime": 22497219,
                     "bgpPeerInUpdateElapsedTime": 22497219,
                     "context_name": "",
-                    "bgpLocalAs": 65504
+                    "bgpLocalAs": 65504,
+                    "vrfLocalAs": null
                 }
             ],
             "bgpPeers_cbgp": []
@@ -48990,6 +48994,7 @@
                     "sensor_index": "0",
                     "sensor_type": "hh3cdevMFanStatusTable",
                     "sensor_descr": "Fan 0",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 1,
@@ -49013,6 +49018,7 @@
                     "sensor_index": "0",
                     "sensor_type": "hh3cdevMPowerStatusTable",
                     "sensor_descr": "Power Supply 0",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 1,
@@ -49036,6 +49042,7 @@
                     "sensor_index": "1",
                     "sensor_type": "hh3cdevMPowerStatusTable",
                     "sensor_descr": "Power Supply 1",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 1,
@@ -49059,6 +49066,7 @@
                     "sensor_index": "2",
                     "sensor_type": "hh3cdevMPowerStatusTable",
                     "sensor_descr": "Power Supply 2",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 1,
@@ -49082,6 +49090,7 @@
                     "sensor_index": "3",
                     "sensor_type": "hh3cdevMPowerStatusTable",
                     "sensor_descr": "Power Supply 3",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 3,
@@ -49105,6 +49114,7 @@
                     "sensor_index": "4",
                     "sensor_type": "hh3cdevMPowerStatusTable",
                     "sensor_descr": "Power Supply 4",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 3,
@@ -49128,6 +49138,7 @@
                     "sensor_index": "5",
                     "sensor_type": "hh3cdevMPowerStatusTable",
                     "sensor_descr": "Power Supply 5",
+                    "group": null,
                     "sensor_divisor": 1,
                     "sensor_multiplier": 1,
                     "sensor_current": 3,

@@ -23,14 +23,13 @@ if (isset($_SESSION['stage']) && $_SESSION['stage'] == 2) {
     require realpath(__DIR__ . '/..') . '/includes/init.php';
 
     if (!LegacyAuth::check()) {
-        echo "Unauthenticated\n";
-        exit;
+        die('Unauthorized');
     }
 }
 
 set_debug($_REQUEST['debug']);
-$id = str_replace('/', '', $_REQUEST['id']);
+$id = basename($_REQUEST['id']);
 
-if (isset($id)) {
-    require $config['install_dir'] . "/html/includes/output/$id.inc.php";
+if ($id && is_file(\LibreNMS\Config::get('install_dir') . "/includes/html/output/$id.inc.php")) {
+    require \LibreNMS\Config::get('install_dir') . "/includes/html/output/$id.inc.php";
 }

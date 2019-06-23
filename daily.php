@@ -7,6 +7,7 @@
  */
 
 use App\Models\Device;
+use App\Models\DeviceGroup;
 use Illuminate\Database\Eloquent\Collection;
 use LibreNMS\Config;
 use LibreNMS\Exceptions\LockException;
@@ -24,13 +25,13 @@ if (isset($options['d'])) {
 }
 
 if ($options['f'] === 'update') {
-    if (!$config['update']) {
+    if (!Config::get('base_url')) {
         exit(0);
     }
 
-    if ($config['update_channel'] == 'master') {
+    if (Config::get('base_url') == 'master') {
         exit(1);
-    } elseif ($config['update_channel'] == 'release') {
+    } elseif (Config::get('base_url') == 'release') {
         exit(3);
     }
     exit(0);
@@ -88,6 +89,11 @@ if ($options['f'] === 'syslog') {
         echo $e->getMessage() . PHP_EOL;
         exit(-1);
     }
+}
+
+if ($options['f'] === 'ports_fdb') {
+    $ret = lock_and_purge('ports_fdb', 'updated_at < DATE_SUB(NOW(), INTERVAL ? DAY)');
+    exit($ret);
 }
 
 if ($options['f'] === 'eventlog') {
@@ -160,13 +166,22 @@ if ($options['f'] === 'handle_notifiable') {
 
         // if update is not set to false and version is min or newer
         if (Config::get('update') && $options['r']) {
-            new_notification(
-                $error_title,
-                'PHP version 5.6.4 is the minimum supported version as of January 10, 2018.  We recommend you update to PHP a supported version of PHP (7.1 suggested) to continue to receive updates.  If you do not update PHP, LibreNMS will continue to function but stop receiving bug fixes and updates.',
-                2,
-                'daily.sh'
-            );
-            exit(1);
+            if ($options['r'] === 'php53') {
+                $phpver   = '5.6.4';
+                $eol_date = 'January 10th, 2018';
+            } elseif ($options['r'] === 'php56') {
+                $phpver   = '7.1.3';
+                $eol_date = 'February 1st, 2019';
+            }
+            if (isset($phpver)) {
+                new_notification(
+                    $error_title,
+                    "PHP version $phpver is the minimum supported version as of $eol_date.  We recommend you update to PHP a supported version of PHP (7.2 suggested) to continue to receive updates.  If you do not update PHP, LibreNMS will continue to function but stop receiving bug fixes and updates.",
+                    2,
+                    'daily.sh'
+                );
+                exit(1);
+            }
         }
 
         remove_notification($error_title);
@@ -228,11 +243,11 @@ if ($options['f'] === 'purgeusers') {
         }
 
         $purge = 0;
-        if (is_numeric($config['radius']['users_purge']) && $config['auth_mechanism'] === 'radius') {
-            $purge = $config['radius']['users_purge'];
+        if (is_numeric(\LibreNMS\Config::get('radius.users_purge')) && Config::get('base_url') === 'radius') {
+            $purge = \LibreNMS\Config::get('radius.users_purge');
         }
-        if (is_numeric($config['active_directory']['users_purge']) && $config['auth_mechanism'] === 'active_directory') {
-            $purge = $config['active_directory']['users_purge'];
+        if (is_numeric(\LibreNMS\Config::get('active_directory.users_purge')) && Config::get('base_url') === 'active_directory') {
+            $purge = \LibreNMS\Config::get('active_directory.users_purge');
         }
         if ($purge > 0) {
             foreach (dbFetchRows("SELECT DISTINCT(`user`) FROM `authlog` WHERE `datetime` >= DATE_SUB(NOW(), INTERVAL ? DAY)", array($purge)) as $user) {
@@ -273,10 +288,30 @@ if ($options['f'] === 'refresh_alert_rules') {
     }
 }
 
+if ($options['f'] === 'refresh_device_groups') {
+    try {
+        if (Config::get('distributed_poller')) {
+            MemcacheLock::lock('refresh_device_groups', 0, 86000);
+        }
+
+        echo 'Refreshing device group table relationships' . PHP_EOL;
+        DeviceGroup::all()->each(function ($deviceGroup) {
+            if ($deviceGroup->type == 'dynamic') {
+                /** @var DeviceGroup $deviceGroup */
+                $deviceGroup->rules = $deviceGroup->getParser()->generateJoins()->toArray();
+                $deviceGroup->save();
+            }
+        });
+    } catch (LockException $e) {
+        echo $e->getMessage() . PHP_EOL;
+        exit(-1);
+    }
+}
+
 if ($options['f'] === 'notify') {
-    if (isset($config['alert']['default_mail'])) {
+    if (\LibreNMS\Config::has('alert.default_mail')) {
         send_mail(
-            $config['alert']['default_mail'],
+            \LibreNMS\Config::get('alert.default_mail'),
             '[LibreNMS] Auto update has failed for ' . Config::get('distributed_poller_name'),
             "We just attempted to update your install but failed. The information below should help you fix this.\r\n\r\n" . $options['o']
         );

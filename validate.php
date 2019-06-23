@@ -65,6 +65,10 @@ register_shutdown_function(function () {
     global $precheck_complete;
 
     if (!$precheck_complete) {
+        // use this in case composer autoloader isn't available
+        spl_autoload_register(function ($class) {
+            include str_replace('\\', '/', $class) . '.php';
+        });
         print_header(version_info());
     }
 });
@@ -126,27 +130,21 @@ if ($pre_checks_failed) {
     exit;
 }
 
-$init_modules = array('nodb');
+$init_modules = [];
 require 'includes/init.php';
 
 // make sure install_dir is set correctly, or the next includes will fail
 if (!file_exists(Config::get('install_dir').'/config.php')) {
     $suggested = realpath(__DIR__);
-    print_fail('$config[\'install_dir\'] is not set correctly.', "It should probably be set to: $suggested");
+    print_fail('\'install_dir\' config setting is not set correctly.', "It should probably be set to: $suggested");
     exit;
 }
-
-
-// Connect to MySQL
-\LibreNMS\DB\Eloquent::boot();
 
 if (\LibreNMS\DB\Eloquent::isConnected()) {
     $validator->ok('Database connection successful', null, 'database');
 } else {
     $validator->fail('Error connecting to your database.', null, 'database');
 }
-
-Config::load();
 
 $precheck_complete = true; // disable shutdown function
 print_header($validator->getVersions());

@@ -148,7 +148,7 @@ function submitCustomRange(frmdata) {
 
 function updateResolution(refresh)
 {
-    $.post('ajax/set_resolution',
+    $.post(ajax_url + '/set_resolution',
         {
             width: $(window).width(),
             height:$(window).height()
@@ -299,22 +299,38 @@ $(document).ready(function () {
     }, 300000);
 });
 
-function loadScript(src, callback) {
-    var script = document.createElement("script");
-    script.type = "text/javascript";
-    if(callback)script.onload=callback;
-    document.getElementsByTagName("head")[0].appendChild(script);
-    script.src = src;
+var jsFilesAdded = [];
+var jsLoadingFiles = {};
+function loadjs(filename, func){
+    if (jsFilesAdded.indexOf(filename) < 0) {
+        if (filename in jsLoadingFiles) {
+            // store all waiting callbacks
+            jsLoadingFiles[filename].push(func);
+        } else {
+            // first request, load the script store the callback for this request
+            jsLoadingFiles[filename] = [func];
+            $.getScript(filename, function () {
+                // finish loading the script, call all waiting callbacks
+                jsFilesAdded.push(filename);
+                for (var i = 0; i < jsLoadingFiles[filename].length; i++) {
+                    jsLoadingFiles[filename][i]();
+                }
+                delete jsLoadingFiles[filename];
+            });
+        }
+    } else {
+        func();
+    }
 }
 
-function init_map(id, engine, api_key) {
+function init_map(id, engine, api_key, config) {
     var leaflet = L.map(id);
     var baseMaps = {};
     leaflet.setView([0, 0], 15);
 
     if (engine === 'google') {
-        loadScript('https://maps.googleapis.com/maps/api/js?key=' + api_key, function () {
-            loadScript('js/Leaflet.GoogleMutant.js', function () {
+        loadjs('https://maps.googleapis.com/maps/api/js?key=' + api_key, function () {
+            loadjs('js/Leaflet.GoogleMutant.js', function () {
                 var roads = L.gridLayer.googleMutant({
                     type: 'roadmap'	// valid values are 'roadmap', 'satellite', 'terrain' and 'hybrid'
                 });
@@ -331,7 +347,7 @@ function init_map(id, engine, api_key) {
             });
         });
     } else if (engine === 'bing') {
-        loadScript('js/leaflet-bing-layer.min.js', function () {
+        loadjs('js/leaflet-bing-layer.min.js', function () {
             var roads = L.tileLayer.bing({
                 bingMapsKey: api_key,
                 imagerySet: 'RoadOnDemand'
@@ -349,7 +365,7 @@ function init_map(id, engine, api_key) {
             roads.addTo(leaflet);
         });
     } else if (engine === 'mapquest') {
-        loadScript('https://www.mapquestapi.com/sdk/leaflet/v2.2/mq-map.js?key=' + api_key, function () {
+        loadjs('https://www.mapquestapi.com/sdk/leaflet/v2.2/mq-map.js?key=' + api_key, function () {
             var roads = MQ.mapLayer();
             var satellite = MQ.hybridLayer();
 
@@ -361,7 +377,7 @@ function init_map(id, engine, api_key) {
             roads.addTo(leaflet);
         });
     } else {
-        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        var osm = L.tileLayer('//' + config.tile_url + '/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         });
@@ -406,7 +422,7 @@ function init_map_marker(leaflet, latlng) {
 function update_location(id, latlng, callback) {
     $.ajax({
         method: 'PATCH',
-        url: "ajax/location/" + id,
+        url: ajax_url + '/location/' + id,
         data: {lat: latlng.lat, lng: latlng.lng}
     }).success(function () {
         toastr.success('Location updated');
@@ -435,7 +451,6 @@ function update_location(id, latlng, callback) {
 
 function http_fallback(link) {
     var url = link.getAttribute('href');
-    console.log(url);
     try {
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, false);
@@ -446,10 +461,75 @@ function http_fallback(link) {
             url = url.replace(/^https:\/\//, 'http://');
         }
     } catch (e) {
-        // console.log(e);
         url = url.replace(/^https:\/\//, 'http://');
     }
 
     window.open(url, '_blank');
     return false;
+}
+
+function init_select2(selector, type, data, selected, placeholder) {
+    var $select = $(selector);
+
+    // allow function to be assigned to pass data
+    var data_function = function(params) {
+        data.term = params.term;
+        data.page = params.page || 1;
+        return data;
+    };
+    if ($.isFunction(data)) {
+        data_function = data;
+    }
+
+    $select.select2({
+        theme: "bootstrap",
+        dropdownAutoWidth : true,
+        width: "auto",
+        placeholder: placeholder,
+        allowClear: true,
+        ajax: {
+            url: ajax_url + '/select/' + type,
+            delay: 150,
+            data: data_function
+        }
+    });
+
+    if (selected) {
+        console.log(selected);
+        if (typeof selected !== 'object') {
+            selected = {id: selected, text: selected};
+        }
+
+        var newOption = new Option(selected.text, selected.id, true, true);
+        $select.append(newOption).trigger('change');
+    }
+}
+
+function humanize_duration(seconds) {
+    // transform xxx seconds into yy years MM months dd days hh hours mm:ss
+    
+    var duration = moment.duration(Number(seconds), 's');
+    var years = duration.years(),
+        months = duration.months(),
+        days = duration.days(),
+        hrs = duration.hours(),
+        mins = duration.minutes(),
+        secs = duration.seconds();
+    var res = '';
+
+    if (years) {
+        res += years + 'y ';
+    }
+    if (months) {
+        res += months + 'm ';
+    }
+    if (days) {
+        res += days + 'd ';
+    }
+    if (hrs) {
+        res += hrs + 'h ';
+    }
+    res += mins + 'm ' + secs + 's ';
+
+    return res;
 }

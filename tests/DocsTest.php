@@ -37,6 +37,7 @@ class DocTest extends TestCase
         'Extensions/Graphite.md',
         'Extensions/InfluxDB.md',
         'Extensions/OpenTSDB.md',
+        'Extensions/Poller-Service.md',
         'Extensions/Port-Description-Parser.md',
         'Extensions/Prometheus.md',
         'Extensions/RRDCached-Security.md',
@@ -72,5 +73,7 @@ class DocTest extends TestCase
             ->each(function ($missing_doc) {
                 $this->fail("The doc $missing_doc doesn't exist in mkdocs.yml, please add it to the relevant section");
             });
+
+        $this->expectNotToPerformAssertions();
     }
 }

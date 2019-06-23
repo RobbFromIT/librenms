@@ -13,13 +13,14 @@ if (getenv('FILES')) {
     $changed_files = exec("git diff --diff-filter=d --name-only master | tr '\n' ' '|sed 's/,*$//g'");
 }
 
-$changed_files = explode(' ', $changed_files);
+$changed_files = $changed_files ? explode(' ', $changed_files) : [];
 
 $map = [
     'docs'   => 0,
     'python' => 0,
     'bash'   => 0,
     'php'    => 0,
+    'os-php' => 0,
     'os'     => [],
 ];
 
@@ -41,6 +42,9 @@ foreach ($changed_files as $file) {
     // check if os owned file or generic php file
     if (!empty($os_name = os_from_file($file))) {
         $map['os'][] = $os_name;
+        if (ends_with($file, '.php')) {
+            $map['os-php']++;
+        }
     } elseif (ends_with($file, '.php')) {
         $map['php']++;
     }
@@ -122,13 +126,13 @@ if (check_opt($options, 'db')) {
 }
 
 // No php files, skip the php checks.
-if ($map['php'] === 0) {
+if (!empty($changed_files) && $map['php'] === 0 && $map['os-php'] === 0) {
     putenv('SKIP_LINT_CHECK=1');
     putenv('SKIP_STYLE_CHECK=1');
 }
 
 // If we have no php files and no OS' found then also skip unit checks.
-if ($map['php'] === 0 && empty($map['os']) && !$os) {
+if (!empty($changed_files) && $map['php'] === 0 && empty($map['os']) && !$os) {
     putenv('SKIP_UNIT_CHECK=1');
 }
 
